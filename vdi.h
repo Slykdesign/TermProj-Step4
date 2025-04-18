@@ -22,5 +22,6 @@ off_t vdiTranslate(VDIFile *vdi, off_t logicalOffset);
 void displayVDIHeader(VDIFile *vdi);
 void displayVDITranslationMap(VDIFile *vdi);
 void displayMBR(VDIFile *vdi);
+void displayBuffer(uint8_t *buf, uint32_t count, uint64_t offset);
 
 #endif
