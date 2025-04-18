@@ -7,9 +7,6 @@
 // Function prototypes
 void displayBufferPage(uint8_t *buf, uint32_t count, uint32_t skip, uint64_t offset);
 void displayBuffer(uint8_t *buf, uint32_t count, uint64_t offset);
-void displaySuperblock(Ext2Superblock *sb);
-void displayBGDT(Ext2BlockGroupDescriptor *bgdt, uint32_t num_block_groups);
-void displayInode(Inode *inode);
 
 int main() {
     Ext2File *ext2 = openExt2File("./good-fixed-1k.vdi");
