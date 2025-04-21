@@ -31,6 +31,12 @@ VDIFile *vdiOpen(const char *filename) {
     off_t mapOffset = *(off_t *)(vdi->header + 16); // Example offset for map
     lseek(vdi->fd, mapOffset, SEEK_SET);
     vdi->map = malloc(vdi->totalPages * sizeof(uint32_t));
+    if (!vdi->map) {
+        perror("Error allocating memory for translation map");
+        close(vdi->fd);
+        free(vdi);
+        return NULL;
+    }
     read(vdi->fd, vdi->map, vdi->totalPages * sizeof(uint32_t));
 
     vdi->cursor = 0;
@@ -52,8 +58,7 @@ ssize_t vdiRead(VDIFile *vdi, void *buf, size_t count) {
     while (count > 0) {
         off_t physicalOffset = vdiTranslate(vdi, vdi->cursor);
         if (physicalOffset == -1) {
-            memset(buffer, 0, count);  // Unallocated pages return zeroes
-            return bytesRead;
+            return -1; // Return error if translation fails
         }
 
         size_t pageRemaining = vdi->pageSize - (vdi->cursor % vdi->pageSize);
