@@ -68,23 +68,25 @@ typedef struct {
     uint32_t bg_reserved[3];
 } Ext2BlockGroupDescriptor;
 
-typedef struct {
+struct Ext2File{
+    FILE *fd;
+    VDIFile *vdi;
     MBRPartition *partition;
     Ext2Superblock superblock;
     Ext2BlockGroupDescriptor *bgdt;
     uint32_t block_size;
     uint32_t num_block_groups;
-} Ext2File;
+};
 
-Ext2File *openExt2File(const char *filename);
-void closeExt2File(Ext2File *f);
-bool fetchBlock(Ext2File *f, uint32_t blockNum, void *buf);
-bool writeBlock(Ext2File *f, uint32_t blockNum, void *buf);
-bool fetchSuperblock(Ext2File *f, uint32_t blockNum, Ext2Superblock *sb);
-bool writeSuperblock(Ext2File *f, uint32_t blockNum, Ext2Superblock *sb);
-bool fetchBGDT(Ext2File *f, uint32_t blockNum, Ext2BlockGroupDescriptor *bgdt);
-bool writeBGDT(Ext2File *f, uint32_t blockNum, Ext2BlockGroupDescriptor *bgdt);
-void displaySuperblock(Ext2Superblock *sb);
-void displayBGDT(Ext2BlockGroupDescriptor *bgdt, uint32_t num_block_groups);
+struct Ext2File *openExt2(char *fn);
+void closeExt2(struct Ext2File *f);
+bool fetchBlock(struct Ext2File *f, uint32_t blockNum, void *buf);
+bool writeBlock(struct Ext2File *f, uint32_t blockNum, void *buf);
+bool fetchSuperblock(struct Ext2File *f, uint32_t blockNum, Ext2Superblock *sb);
+bool writeSuperblock(struct Ext2File *f, uint32_t blockNum, Ext2Superblock *sb);
+bool fetchBGDT(struct Ext2File *f, uint32_t blockNum, Ext2BlockGroupDescriptor *bgdt);
+bool writeBGDT(struct Ext2File *f, uint32_t blockNum, Ext2BlockGroupDescriptor *bgdt);
+void displaySuperblock(const Ext2Superblock *sb);
+void displayBGDT(const Ext2BlockGroupDescriptor *bgdt, uint32_t num_block_groups);
 
 #endif

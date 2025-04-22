@@ -1,5 +1,5 @@
 #include "partition.h"
-#include "vdi.h""
+#include "vdi.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

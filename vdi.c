@@ -185,11 +185,8 @@ void displayVDITranslationMap(VDIFile *vdi) {
 }
 
 void displayMBR(VDIFile *vdi) {
-    uint8_t mbr[512];
-    // Seek to logical offset 0 in the virtual disk
+    uint8_t mbr[256];
     vdiSeek(vdi, 0, SEEK_SET);
-    // Read 512 bytes from the virtual disk
     vdiRead(vdi, mbr, sizeof(mbr));
-    // Display the contents of the MBR buffer
     displayBuffer(mbr, sizeof(mbr), 0);
 }
