@@ -5,7 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 
-int32_t fetchInode(Ext2File *f, uint32_t iNum, Inode *buf) {
+int32_t fetchInode(struct Ext2File *f, uint32_t iNum, Inode *buf) {
     if (iNum == 0 || iNum > f->superblock.s_inodes_count) {
         return -1; // Invalid inode number
     }
@@ -24,7 +24,7 @@ int32_t fetchInode(Ext2File *f, uint32_t iNum, Inode *buf) {
     return 0; // Success
 }
 
-int32_t writeInode(Ext2File *f, uint32_t iNum, Inode *buf) {
+int32_t writeInode(struct Ext2File *f, uint32_t iNum, Inode *buf) {
     if (iNum == 0 || iNum > f->superblock.s_inodes_count) {
         return -1; // Invalid inode number
     }
@@ -46,7 +46,7 @@ int32_t writeInode(Ext2File *f, uint32_t iNum, Inode *buf) {
     return 0; // Success
 }
 
-int32_t inodeInUse(Ext2File *f, uint32_t iNum) {
+int32_t inodeInUse(struct Ext2File *f, uint32_t iNum) {
     if (iNum == 0 || iNum > f->superblock.s_inodes_count) {
         return -1; // Invalid inode number
     }
@@ -64,7 +64,7 @@ int32_t inodeInUse(Ext2File *f, uint32_t iNum) {
     return (block_buf[offset / 8] & (1 << (offset % 8))) != 0;
 }
 
-uint32_t allocateInode(Ext2File *f, int32_t group) {
+uint32_t allocateInode(struct Ext2File *f, int32_t group) {
     for (uint32_t g = (group == -1 ? 0 : group); g < f->num_block_groups; g++) {
         uint8_t block_buf[f->block_size];
         if (!fetchBlock(f, f->bgdt[g].bg_inode_bitmap, block_buf)) {
@@ -86,7 +86,7 @@ uint32_t allocateInode(Ext2File *f, int32_t group) {
     return 0; // No free inode found
 }
 
-int32_t freeInode(Ext2File *f, uint32_t iNum) {
+int32_t freeInode(struct Ext2File *f, uint32_t iNum) {
     if (iNum == 0 || iNum > f->superblock.s_inodes_count) {
         return -1; // Invalid inode number
     }

@@ -24,11 +24,11 @@ typedef struct {
 } Inode;
 
 // New function prototypes
-int32_t fetchInode(Ext2File *f, uint32_t iNum, Inode *buf);
-int32_t writeInode(Ext2File *f, uint32_t iNum, Inode *buf);
-int32_t inodeInUse(Ext2File *f, uint32_t iNum);
-uint32_t allocateInode(Ext2File *f, int32_t group);
-int32_t freeInode(Ext2File *f, uint32_t iNum);
+int32_t fetchInode(struct Ext2File *f, uint32_t iNum, Inode *buf);
+int32_t writeInode(struct Ext2File *f, uint32_t iNum, Inode *buf);
+int32_t inodeInUse(struct Ext2File *f, uint32_t iNum);
+uint32_t allocateInode(struct Ext2File *f, int32_t group);
+int32_t freeInode(struct Ext2File *f, uint32_t iNum);
 void displayInode(Inode *inode);
 
 #endif //INODE_H

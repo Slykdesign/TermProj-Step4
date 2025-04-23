@@ -9,7 +9,7 @@ void displayBufferPage(uint8_t *buf, uint32_t count, uint32_t skip, uint64_t off
 void displayBuffer(uint8_t *buf, uint32_t count, uint64_t offset);
 
 int main() {
-    Ext2File *ext2 = openExt2File("./good-fixed-1k.vdi");
+    struct Ext2File *ext2 = openExt2("./good-fixed-1k.vdi");
     if (!ext2) return 1;
 
     printf("Superblock from block 0\n");
@@ -39,7 +39,7 @@ int main() {
         printf("Failed to allocate new inode\n");
     }
 
-    closeExt2File(ext2);
+    closeExt2(ext2);
     return 0;
 }
 
