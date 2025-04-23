@@ -54,7 +54,6 @@ typedef struct {
     uint16_t s_reserved_word_pad;
     uint32_t s_default_mount_opts;
     uint32_t s_first_meta_bg;
-    uint32_t s_reserved[190];
 } Ext2Superblock;
 
 typedef struct {
