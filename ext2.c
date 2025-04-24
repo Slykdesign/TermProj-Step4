@@ -1,11 +1,14 @@
 #include "ext2.h"
+#include "partition.h"
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include "partition.h"
+#include <time.h>
 
 // Define the superblock offset for ext2 (always at 1024 bytes)
 #define EXT2_SUPERBLOCK_OFFSET 1024
+#define EXT2_SUPER_MAGIC 0xEF53
 
 struct Ext2File *openExt2(char *fn) {
     // Allocate memory for Ext2File
@@ -112,37 +115,147 @@ void closeExt2(struct Ext2File *f) {
 }
 
 bool fetchBlock(struct Ext2File *f, uint32_t blockNum, void *buf) {
-    off_t offset = (blockNum + f->superblock.s_first_data_block) * f->block_size;
-    if (vdiSeekPartition(f->partition, offset, SEEK_SET) < 0) return false;
-    return vdiReadPartition(f->partition, buf, f->block_size) == f->block_size;
+    uint64_t offset = (blockNum + f->superblock.s_first_data_block) * f->blockSize;
+    if (vdiSeekPartition(f->partition, offset, SEEK_SET) != offset) {
+        printf("Failed to seek to block %u\n", blockNum);
+        return false;
+    }
+    if (vdiReadPartition(f->partition, buf, f->blockSize) != f->blockSize) {
+        printf("Failed to read block %u\n", blockNum);
+        return false;
+    }
+    return true;
 }
 
 bool writeBlock(struct Ext2File *f, uint32_t blockNum, void *buf) {
-    off_t offset = (blockNum + f->superblock.s_first_data_block) * f->block_size;
-    if (vdiSeekPartition(f->partition, offset, SEEK_SET) < 0) return false;
-    return writePartition(f->partition, buf, f->block_size) == f->block_size;
+    off_t offset = (blockNum + f->superblock.s_first_data_block) * f->blockSize;
+    if (vdiSeekPartition(f->partition, offset, SEEK_SET) != offset) {
+        printf("Failed to seek to block %u for writing\n", blockNum);
+        return false;
+    }
+    if (writePartition(f->partition, buf, f->blockSize) != f->blockSize) {
+        printf("Failed to write block %u\n", blockNum);
+        return false;
+    }
+    return true;
 }
 
 bool fetchSuperblock(struct Ext2File *f, uint32_t blockNum, Ext2Superblock *sb) {
-    (void)blockNum; // Unused, superblock is always at offset 1024
-    if (vdiSeekPartition(f->partition, 1024, SEEK_SET) < 0) return false;
-    if (vdiReadPartition(f->partition, sb, sizeof(Ext2Superblock)) != sizeof(Ext2Superblock)) return false;
-    return sb->s_magic == 0xEF53;
+    if (blockNum == 0) {
+        if (vdiSeekPartition(f->partition, EXT2_SUPERBLOCK_OFFSET, SEEK_SET) != EXT2_SUPERBLOCK_OFFSET) {
+            printf("Failed to seek main superblock offset\n");
+            return false;
+        }
+        if (vdiReadPartition(f->partition, sb, sizeof(Ext2Superblock)) != sizeof(Ext2Superblock)) {
+            printf("Failed to read main superblock\n");
+            return false;
+        }
+    } else {
+        uint32_t blockSize = 1024 << sb->s_log_block_size;
+        uint8_t *buf = (uint8_t *)malloc(blockSize);
+
+        if (blockSize == 1024 && blockNum > 0) {
+            blockNum++;
+        }
+
+        printf("%d\n", blockNum);
+        if (!fetchSuperblock(f, blockNum, buf)) {
+            printf("Failed to fetch backup superblock\n");
+            free(buf);
+            return false;
+        }
+
+        memcpy(sb, buf, sizeof(Ext2Superblock));
+        free(buf);
+    }
+
+    if (sb->s_magic != EXT2_SUPER_MAGIC) {
+        printf("Invalid superblock 0x%X\n", sb->s_magic);
+        return false;
+    }
+    return true;
 }
 
 bool writeSuperblock(struct Ext2File *f, uint32_t blockNum, Ext2Superblock *sb) {
-    return writeBlock(f, blockNum, sb);
+    if (blockNum == 0) {
+        // Write the main superblock using partition-level functions.
+        if (vdiSeekPartition(f->partition, EXT2_SUPERBLOCK_OFFSET, SEEK_SET) != EXT2_SUPERBLOCK_OFFSET) {
+            printf("Failed to seek to main superblock offset for writing\n");
+            return false;
+        }
+        if (writePartition(f->partition, sb, sizeof(Ext2Superblock)) != sizeof(Ext2Superblock)) {
+            printf("Failed to write main superblock\n");
+            return false;
+        }
+    } else {
+        uint32_t blockSize = f->blockSize; // Derived from superblock info.
+        // Adjust blockNum for 1KB block file systems.
+        if (blockSize == 1024 && blockNum > 0) {
+            blockNum++;
+        }
+        // Allocate a temporary buffer, write the superblock into it.
+        uint8_t *buf = (uint8_t *)malloc(blockSize * sizeof(uint8_t));
+        memcpy(buf, sb, sizeof(Ext2Superblock));
+
+        // Use writeBlock() to write the backup superblock.
+        if (!writeBlock(f, blockNum, buf)) {
+            printf("Failed to write backup superblock\n");
+            free(buf);
+            return false;
+        }
+
+        // For verification, read the block back.
+        uint8_t *verifyBuf = (uint8_t *)malloc(blockSize * sizeof(uint8_t));
+        if (!fetchBlock(f, blockNum, verifyBuf)) {
+            printf("Failed to read back backup superblock for verification\n");
+            free(buf);
+            free(verifyBuf);
+            return false;
+        }
+
+        Ext2Superblock verifySB;
+        memcpy(&verifySB, verifyBuf, sizeof(Ext2Superblock));
+        free(verifyBuf);
+
+        if (verifySB.s_magic != EXT2_SUPER_MAGIC) {
+            printf("Invalid backup superblock after writing: 0x%x\n", verifySB.s_magic);
+            free(buf);
+            return false;
+        }
+        free(buf);
+    }
+    return true;
 }
 
 bool fetchBGDT(struct Ext2File *f, uint32_t blockNum, Ext2BlockGroupDescriptor *bgdt) {
-    return fetchBlock(f, blockNum, bgdt);
+    uint8_t *buffer = malloc(f->blockSize);
+    if (!buffer) return false;
+
+    if (!fetchBlock(f, blockNum, bgdt)) {
+        printf("Failed to fetch Block Group Descriptor Table at block %u\n", blockNum);
+        return false;
+    }
+
+    memcpy(bgdt, buffer, f->numBlockGroups * sizeof(Ext2BlockGroupDescriptor));
+    free(buffer);
+
+    return true;
 }
 
 bool writeBGDT(struct Ext2File *f, uint32_t blockNum, Ext2BlockGroupDescriptor *bgdt) {
-    return writeBlock(f, blockNum, bgdt);
+    uint8_t *buffer = malloc(f->blockSize);
+    if (!buffer) return false;
+
+    memset(buffer, 0, f->blockSize);
+    memcpy(buffer, bgdt, f->numBlockGroups * sizeof(Ext2BlockGroupDescriptor));
+
+    bool result = writeBlock(f, blockNum, buffer);
+    free(buffer);
+
+    return result;
 }
 
-void displaySuperblock(const Ext2Superblock *sb) {
+void displaySuperblock(Ext2Superblock *sb) {
     printf("Superblock contents:\n");
     printf("Number of inodes: %u\n", sb->s_inodes_count);
     printf("Number of blocks: %u\n", sb->s_blocks_count);
@@ -197,15 +310,20 @@ void displaySuperblock(const Ext2Superblock *sb) {
     printf("First meta block group: %u\n", sb->s_first_meta_bg);
 }
 
-void displayBGDT(const Ext2BlockGroupDescriptor *bgdt, uint32_t num_block_groups) {
+void displayBGDT(Ext2BlockGroupDescriptor *bgdt, uint32_t numBlockGroups) {
     printf("Block Group Descriptor Table:\n");
-    for (uint32_t i = 0; i < num_block_groups; i++) {
-        printf("  Block number %u:\n", i);
-        printf("    Block bitmap: %u\n", bgdt[i].bg_block_bitmap);
-        printf("    Inode bitmap: %u\n", bgdt[i].bg_inode_bitmap);
-        printf("    Inode table: %u\n", bgdt[i].bg_inode_table);
-        printf("    Free blocks count: %u\n", bgdt[i].bg_free_blocks_count);
-        printf("    Free inodes count: %u\n", bgdt[i].bg_free_inodes_count);
-        printf("    Used directories count: %u\n", bgdt[i].bg_used_dirs_count);
+    printf("Block  Block  Inode  Inode  Free   Free   Used\n");
+    printf("Number Bitmap Bitmap Table Blocks Inodes Dirs\n");
+    printf("------------------------------------------------\n");
+
+    for (uint32_t i = 0; i < numBlockGroups; i++) {
+        printf("%5u %6u %6u %6u %6u %6u %4u\n",
+            i,
+            bgdt[i].bg_block_bitmap,
+            bgdt[i].bg_inode_bitmap,
+            bgdt[i].bg_inode_table,
+            bgdt[i].bg_free_blocks_count,
+            bgdt[i].bg_free_inodes_count,
+            bgdt[i].bg_used_dirs_count);
     }
 }
