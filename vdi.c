@@ -179,8 +179,8 @@ void displayVDIHeader(VDIFile *vdi) {
 
 void displayVDITranslationMap(VDIFile *vdi) {
     uint8_t mbr[512];
-    lseek(vdi->fd, 0, SEEK_SET);
-    read(vdi->fd, mbr, 512);
+    vdiSeek(vdi, 0, SEEK_SET);
+    vdiRead(vdi, mbr, 512);
     displayBuffer(mbr, 512, 0x0);
 }
 
