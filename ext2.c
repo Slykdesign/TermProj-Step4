@@ -1,54 +1,105 @@
 #include "ext2.h"
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
-#include <unistd.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include "partition.h"
+
+// Define the superblock offset for ext2 (always at 1024 bytes)
+#define EXT2_SUPERBLOCK_OFFSET 1024
 
 struct Ext2File *openExt2(char *fn) {
+    // Allocate memory for Ext2File
     struct Ext2File *ext2 = malloc(sizeof(struct Ext2File));
-    if (!ext2) return NULL;
+    if (!ext2) {
+        printf("Failed to allocate memory for Ext2File.\n");
+        return NULL;
+    }
 
+    // Open the MBR partition
     ext2->partition = openPartition(fn, 0);
     if (!ext2->partition) {
+        printf("Failed to open MBR partition.\n");
         free(ext2);
         return NULL;
     }
 
-    // Read the main superblock located at an offset of 1024 bytes from the start of the partition
-    if (!fetchSuperblock(ext2, 0, &ext2->superblock)) {
+    // Find the partition of type 0x83
+    int partIndex = 1;
+    for (int i = 0; i < 4; ++i) {
+        MBRPartitionEntry *entry = (MBRPartitionEntry *)(ext2->partition->partitionTable + i * 16);
+        if (entry->partitionType == 0x83) {  // Check for Linux ext2 partition type
+            partIndex = i;
+            break;
+        }
+    }
+
+    if (partIndex < 0) {
+        printf("No ext2 partition of type 0x83 found.\n");
         closePartition(ext2->partition);
         free(ext2);
         return NULL;
     }
 
-    // Validate the superblock by checking the magic number
-    if (ext2->superblock.s_magic != 0xEF53) {
+    // Close and reopen the partition for the identified partition index
+    closePartition(ext2->partition);
+    ext2->partition = openPartition(fn, partIndex);
+    if (!ext2->partition) {
+        printf("Failed to open partition %d.\n", partIndex);
+        free(ext2);
+        return NULL;
+    }
+
+    // Calculate the superblock offset
+    off_t superblockOffset = ext2->partition->startSector * 512 + EXT2_SUPERBLOCK_OFFSET;
+
+    // Attempt to seek to the superblock
+    if (vdiSeekPartition(ext2->partition, superblockOffset, SEEK_SET) != superblockOffset) {
+        printf("Failed to seek to superblock in partition %d.\n", partIndex);
+        closePartition(ext2->partition);
+        free(ext2);
+        return NULL;
+    }
+
+    // Read the superblock
+    if (!fetchSuperblock(ext2, 0, &ext2->superblock)) {
+        printf("Failed to fetch the superblock in partition %d.\n", partIndex);
+        closePartition(ext2->partition);
+        free(ext2);
+        return NULL;
+    }
+
+    // Validate the superblock magic number
+    if (ext2->superblock.s_magic != EXT2_SUPER_MAGIC) {
+        printf("Invalid superblock magic number (0x%X).\n", ext2->superblock.s_magic);
         closePartition(ext2->partition);
         free(ext2);
         return NULL;
     }
 
     // Calculate block size and number of block groups
-    ext2->block_size = 1024 << ext2->superblock.s_log_block_size;
-    ext2->num_block_groups = (ext2->superblock.s_blocks_count + ext2->superblock.s_blocks_per_group - 1) / ext2->superblock.s_blocks_per_group;
+    ext2->blockSize = 1024 << ext2->superblock.s_log_block_size;
+    ext2->numBlockGroups = (ext2->superblock.s_blocks_count + ext2->superblock.s_blocks_per_group - 1) / ext2->superblock.s_blocks_per_group;
 
     // Allocate memory for block group descriptor table
-    ext2->bgdt = malloc(ext2->num_block_groups * sizeof(Ext2BlockGroupDescriptor));
+    ext2->bgdt = malloc(ext2->numBlockGroups * sizeof(Ext2BlockGroupDescriptor));
     if (!ext2->bgdt) {
+        printf("Failed to allocate memory for block group descriptor table.\n");
         closePartition(ext2->partition);
         free(ext2);
         return NULL;
     }
 
-    // Read the block group descriptor table
-    uint32_t bgdt_block = (ext2->block_size == 1024) ? 2 : 1;
+    // Fetch the block group descriptor table
+    uint32_t bgdt_block = (ext2->blockSize == 1024) ? 2 : 1;
     if (!fetchBGDT(ext2, bgdt_block, ext2->bgdt)) {
+        printf("Failed to fetch block group descriptor table.\n");
         closePartition(ext2->partition);
         free(ext2->bgdt);
         free(ext2);
         return NULL;
     }
 
+    // Successfully opened the ext2 file system
     return ext2;
 }
 
