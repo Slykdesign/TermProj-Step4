@@ -77,7 +77,8 @@ ssize_t writePartition(MBRPartition *partition, void *buf, size_t count) {
 }
 
 off_t vdiSeekPartition(MBRPartition *partition, off_t offset, int anchor) {
-    off_t newCursor;
+    off_t newCursor = 0;  // <-- initialize
+
     if (anchor == SEEK_SET) {
         newCursor = offset;
     } else if (anchor == SEEK_CUR) {
@@ -88,7 +89,8 @@ off_t vdiSeekPartition(MBRPartition *partition, off_t offset, int anchor) {
         return -1;
     }
 
-    if (newCursor < 0 || newCursor > partition->sectorCount * 512) return -1;
+    if (newCursor < 0 || newCursor > (off_t)(partition->sectorCount * 512))
+        return -1;
 
     partition->cursor = newCursor;
     return partition->cursor;

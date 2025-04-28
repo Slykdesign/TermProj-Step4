@@ -4,7 +4,6 @@
 #include "ext2.h"
 
 typedef struct {
-    // Fields for inode structure...
     uint16_t i_mode;
     uint16_t i_uid;
     uint32_t i_size;
