@@ -16,7 +16,7 @@ int main() {
     displaySuperblock(&ext2->superblock);
 
     printf("\nBlock group descriptor table:\n");
-    displayBGDT(ext2->bgdt, ext2->num_block_groups);
+    displayBGDT(ext2->bgdt, ext2->numBlockGroups);
 
     printf("\nFetching inode 1:\n");
     Inode inode;
